@@ -11,7 +11,7 @@ import (
 )
 
 type CacheInterface interface {
-	Remember(key string, expireTime int, argsMaps map[int]interface{}, getDataFunc GetDataFunc) (interface{}, error)
+	Remember(key string, expireTime int, argsMaps map[int]interface{}, isForce bool, getDataFunc GetDataFunc) (interface{}, error)
 	Forget(key string)
 	Check()
 }
@@ -42,7 +42,7 @@ func (c *MemoryCache) Check() {
 type GetDataFunc func(argsMaps map[int]interface{}) (interface{}, error)
 
 // Remember 將資料記錄到cache
-func (c *MemoryCache) Remember(key string, expireTime int, argsMaps map[int]interface{}, getDataFunc GetDataFunc) (interface{}, error) {
+func (c *MemoryCache) Remember(key string, expireTime int, argsMaps map[int]interface{}, isForce bool, getDataFunc GetDataFunc) (interface{}, error) {
 
 	// 這套件必須給定初始Hash值,才可以去Write (可以考慮替換 crypto/sha256)
 	cHashKey, dErr := hex.DecodeString("000102030405060708090A0B0C0D0E0FF0E0D0C0B0A090807060504030201000") // use your own key here
@@ -60,12 +60,24 @@ func (c *MemoryCache) Remember(key string, expireTime int, argsMaps map[int]inte
 	checksum := hash.Sum(nil)
 	newHashKey := hex.EncodeToString(checksum)
 
-	// 取得快取資料
-	if cacheData, errOfGetCacheData := c.getCacheData(newHashKey); errOfGetCacheData == nil {
-		return cacheData, nil
+	// 如果非必更新的話
+	if !isForce {
+		// 取得快取資料
+		if cacheData, errOfGetCacheData := c.getCacheData(key); errOfGetCacheData == nil {
+			return cacheData, nil
+		}
 	}
+
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
+
+	// 第二次取得快取資料,防止同時間卡在Lock處
+	// 這裡不上Read Lock, 因已經上Write Lock
+	if item, isExist := c.Cache[key]; isExist {
+		if time.Now().Before(item.ExpireTime) {
+			return item.Data, nil
+		}
+	}
 
 	data, err := getDataFunc(argsMaps)
 	if err != nil {
@@ -77,29 +89,6 @@ func (c *MemoryCache) Remember(key string, expireTime int, argsMaps map[int]inte
 		ExpireTime: time.Now().Add(time.Duration(expireTime) * time.Minute),
 	}
 	return c.Cache[newHashKey].Data, nil
-}
-
-// RememberNew 將資料記錄到cache(增加是否強迫更新參數)
-func (c *MemoryCache) RememberNew(key string, expireTime int, argsMaps map[int]interface{}, isForce bool, getDataFunc GetDataFunc) (interface{}, error) {
-
-	// 如果非必更新的話
-	if !isForce {
-		// 取得快取資料
-		if cacheData, errOfGetCacheData := c.getCacheData(key); errOfGetCacheData == nil {
-			return cacheData, nil
-		}
-	}
-	c.Lock.Lock()
-	defer c.Lock.Unlock()
-	data, err := getDataFunc(argsMaps)
-	if err != nil {
-		return "", err
-	}
-	c.Cache[key] = &cacheST{
-		Data:       data,
-		ExpireTime: time.Now().Add(time.Duration(expireTime) * time.Minute),
-	}
-	return c.Cache[key].Data, nil
 }
 
 func (c *MemoryCache) getCacheData(key string) (interface{}, error) {

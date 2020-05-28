@@ -6,20 +6,13 @@ import (
 	"time"
 )
 
-type CacheManager interface {
-	AddCache(mCacheName string)
-	RemoveCache(mCacheName string)
-	GetCache(mCacheName string) CacheInterface
-	FlushAll()
-}
-
 type MemoryCacheManager struct {
 	*sync.RWMutex
 	ctx      context.Context
 	CacheMap map[string]*MemoryCache
 }
 
-func (m MemoryCacheManager) AddCache(mCacheName string) {
+func (m *MemoryCacheManager) AddCache(mCacheName string) {
 	m.Lock()
 	defer m.Unlock()
 	m.CacheMap[mCacheName] = &MemoryCache{
@@ -28,25 +21,25 @@ func (m MemoryCacheManager) AddCache(mCacheName string) {
 	}
 }
 
-func (m MemoryCacheManager) RemoveCache(mCacheName string) {
+func (m *MemoryCacheManager) RemoveCache(mCacheName string) {
 	m.Lock()
 	defer m.Unlock()
 	delete(m.CacheMap, mCacheName)
 }
 
-func (m MemoryCacheManager) FlushAll() {
+func (m *MemoryCacheManager) FlushAll() {
 	m.Lock()
 	defer m.Unlock()
 	m.CacheMap = make(map[string]*MemoryCache, 0)
 }
 
-func (m MemoryCacheManager) GetCache(mCacheName string) CacheInterface {
+func (m *MemoryCacheManager) GetCache(mCacheName string) CacheInterface {
 	m.RLock()
 	defer m.RUnlock()
 	return m.CacheMap[mCacheName]
 }
 
-func (m MemoryCacheManager) Check() {
+func (m *MemoryCacheManager) Check() {
 	ticker := time.Tick(1 * time.Second)
 	for {
 		select {
@@ -68,14 +61,10 @@ func (m MemoryCacheManager) Check() {
 
 // NewMemoryCacheManager 新的Cache控管中心
 func NewMemoryCacheManager() CacheManager {
-
 	manager := &MemoryCacheManager{
 		RWMutex:  new(sync.RWMutex),
 		ctx:      context.Background(),
 		CacheMap: make(map[string]*MemoryCache, 0),
 	}
-
-	go manager.Check()
-
 	return manager
 }
