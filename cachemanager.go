@@ -16,8 +16,9 @@ func (m *MemoryCacheManager) AddCache(mCacheName string) {
 	m.Lock()
 	defer m.Unlock()
 	m.CacheMap[mCacheName] = &MemoryCache{
-		Cache: make(map[string]*cacheST, 0),
-		Lock:  new(sync.RWMutex),
+		Cache:       make(map[string]*cacheST, 0),
+		Lock:        new(sync.RWMutex),
+		InitHashKey: "000102030405060708090A0B0C0D0E0FF0E0D0C0B0A090807060504030201000",
 	}
 }
 

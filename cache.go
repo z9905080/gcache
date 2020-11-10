@@ -24,8 +24,9 @@ type cacheST struct {
 
 // MemoryCache 搜集結構map
 type MemoryCache struct {
-	Cache map[string]*cacheST
-	Lock  *sync.RWMutex
+	Cache       map[string]*cacheST
+	Lock        *sync.RWMutex
+	InitHashKey string
 }
 
 func (c *MemoryCache) Check() {
@@ -41,11 +42,9 @@ func (c *MemoryCache) Check() {
 
 type GetDataFunc func(argsMaps map[int]interface{}) (interface{}, error)
 
-// Remember 將資料記錄到cache
-func (c *MemoryCache) Remember(key string, expireTime int, argsMaps map[int]interface{}, isForce bool, getDataFunc GetDataFunc) (interface{}, error) {
-
+func (c *MemoryCache) GetHashKey(originKey string, argsMap map[int]interface{}) (string, error) {
 	// 這套件必須給定初始Hash值,才可以去Write (可以考慮替換 crypto/sha256)
-	cHashKey, dErr := hex.DecodeString("000102030405060708090A0B0C0D0E0FF0E0D0C0B0A090807060504030201000") // use your own key here
+	cHashKey, dErr := hex.DecodeString(c.InitHashKey) // use your own key here
 	if dErr != nil {
 		log.Printf("Cannot decode hex key: %v", dErr) // add error handling
 		return "", dErr
@@ -55,10 +54,21 @@ func (c *MemoryCache) Remember(key string, expireTime int, argsMaps map[int]inte
 	if getHashErr != nil {
 		return "", getHashErr
 	}
-	hash.Write([]byte(key + fmt.Sprintf("%v", argsMaps)))
+	hash.Write([]byte(originKey + fmt.Sprintf("%v", argsMap)))
 
 	checksum := hash.Sum(nil)
 	newHashKey := hex.EncodeToString(checksum)
+
+	return newHashKey, nil
+}
+
+// Remember 將資料記錄到cache
+func (c *MemoryCache) Remember(key string, expireTime int, argsMaps map[int]interface{}, isForce bool, getDataFunc GetDataFunc) (interface{}, error) {
+
+	newHashKey, hashErr := c.GetHashKey(key, argsMaps)
+	if hashErr != nil {
+		return nil, hashErr
+	}
 
 	// 如果非必更新的話
 	if !isForce {
@@ -103,10 +113,22 @@ func (c *MemoryCache) getCacheData(key string) (interface{}, error) {
 }
 
 // Forget 清除某一筆Cache資料with Key
-func (c *MemoryCache) Forget(key string) {
+func (c *MemoryCache) Forget(key string, argsMap map[int]interface{}) error {
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
-	delete(c.Cache, key)
+	if hashKey, hashErr := c.GetHashKey(key, argsMap); hashErr != nil {
+		return hashErr
+	} else {
+		delete(c.Cache, hashKey)
+		return nil
+	}
+}
+
+// ForgetByHashKey 清除某一筆Cache資料with HashKey
+func (c *MemoryCache) ForgetByHashKey(hashKey string) {
+	c.Lock.Lock()
+	defer c.Lock.Unlock()
+	delete(c.Cache, hashKey)
 }
 
 // Flush 將整個Cache清空
