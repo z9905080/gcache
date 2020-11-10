@@ -12,7 +12,8 @@ import (
 
 type CacheInterface interface {
 	Remember(key string, expireTime int, argsMaps map[int]interface{}, isForce bool, getDataFunc GetDataFunc) (interface{}, error)
-	Forget(key string)
+	Forget(key string, argsMap map[int]interface{}) error
+	ForgetByHashKey(hashKey string)
 	Check()
 }
 
