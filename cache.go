@@ -75,7 +75,7 @@ func (c *MemoryCache) Remember(key string, expireTime int, argsMaps map[int]inte
 	// 如果非必更新的話
 	if !isForce {
 		// 取得快取資料
-		if cacheData, errOfGetCacheData := c.getCacheData(key); errOfGetCacheData == nil {
+		if cacheData, errOfGetCacheData := c.getCacheData(newHashKey); errOfGetCacheData == nil {
 			return cacheData, nil
 		}
 	}
@@ -85,7 +85,7 @@ func (c *MemoryCache) Remember(key string, expireTime int, argsMaps map[int]inte
 
 	// 第二次取得快取資料,防止同時間卡在Lock處
 	// 這裡不上Read Lock, 因已經上Write Lock
-	if item, isExist := c.Cache[key]; isExist {
+	if item, isExist := c.Cache[newHashKey]; isExist {
 		if time.Now().Before(item.ExpireTime) {
 			return item.Data, nil
 		}
